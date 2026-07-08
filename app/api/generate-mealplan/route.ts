@@ -3,13 +3,24 @@
 import { NextResponse } from "next/server";
 import { OpenAI } from "openai";
 
-const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1", // Ensure this is the correct baseURL for your API
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: Request) {
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not set.");
+      return NextResponse.json(
+        { error: "Server misconfiguration: missing OPENAI_API_KEY." },
+        { status: 500 }
+      );
+    }
+
+    // Create the client inside the request handler so a missing/invalid
+    // key returns a proper JSON error instead of crashing the whole route
+    // module at import time (which Next.js turns into an HTML error page).
+    const openai = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
     // Extract parameters from the request body
     const { dietType, calories, allergies, cuisine, snacks } =
       await request.json();
@@ -64,7 +75,24 @@ export async function POST(request: Request) {
     });
 
     // Extract the AI's response
-    const aiContent = response.choices[0].message.content.trim();
+    const rawContent = response.choices[0]?.message?.content;
+
+    if (!rawContent) {
+      console.error("Empty response from AI model:", response);
+      return NextResponse.json(
+        { error: "The AI model returned an empty response. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    // Some free/OpenRouter models wrap JSON in ```json ... ``` fences
+    // despite instructions not to. Strip those before parsing.
+    const aiContent = rawContent
+      .trim()
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/i, "")
+      .trim();
 
     // Attempt to parse the AI's response as JSON
     let parsedMealPlan: { [day: string]: DailyMealPlan };
@@ -73,6 +101,7 @@ export async function POST(request: Request) {
       parsedMealPlan = JSON.parse(aiContent);
     } catch (parseError) {
       console.error("Error parsing AI response as JSON:", parseError);
+      console.error("Raw AI content was:", aiContent);
       // If parsing fails, return the raw text with an error message
       return NextResponse.json(
         { error: "Failed to parse meal plan. Please try again." },
@@ -89,10 +118,10 @@ export async function POST(request: Request) {
 
     // Return the parsed meal plan
     return NextResponse.json({ mealPlan: parsedMealPlan });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating meal plan:", error);
     return NextResponse.json(
-      { error: "Failed to generate meal plan. Please try again later." },
+      { error: error?.message || "Failed to generate meal plan. Please try again later." },
       { status: 500 }
     );
   }

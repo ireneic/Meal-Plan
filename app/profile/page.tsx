@@ -40,7 +40,7 @@ export default function ProfilePage() {
 
   // Adjusted Matching Logic Using priceId
   const currentPlan = availablePlans.find(
-    (plan) => plan.interval === subscription?.subscription?.subscription_tier
+    (plan) => plan.interval === subscription?.subscription?.subscriptionTier
   );
 
   // Mutation: Change Subscription Plan
@@ -200,7 +200,7 @@ export default function ProfilePage() {
                       </p>
                       <p>
                         <strong>Status:</strong>{" "}
-                        {subscription.subscription.subscription_active
+                        {subscription.subscription.subscriptionActive
                           ? "ACTIVE"
                           : "INACTIVE"}
                       </p>
